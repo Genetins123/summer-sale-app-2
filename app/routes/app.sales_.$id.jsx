@@ -78,62 +78,37 @@ export const action = async ({ request, params }) => {
     const endAt = formData.get("endAt");
 
     const saleType = formData.get("saleType") || "PRODUCT";
-
-    const collectionId = formData.get("collectionId");
-    const collectionTitle = formData.get("collectionTitle");
-    const collectionSalePrice = formData.get("collectionSalePrice");
-
+    
     let products = [];
-
+    let collections = [];
+    
     if (saleType === "COLLECTION") {
-      /*
-       * IMPORTANT:
-       * For an existing collection sale, keep using the existing SaleItems.
-       *
-       * We do NOT re-fetch the collection here.
-       *
-       * This preserves the collection snapshot that was created when
-       * the sale was originally created.
-       */
+      collections = JSON.parse(formData.get("collections") || "[]");
       const existingSale = await getSale(params.id);
-
-      if (!existingSale) {
-        throw new Response("Sale Not Found", { status: 404 });
-      }
-
-      products = existingSale.items.map((item) => ({
+      products = existingSale.items.map(item => ({
         productId: item.productId,
         variantId: item.variantId,
         title: item.productTitle,
         sku: item.sku,
         originalPrice: item.originalPrice,
         salePrice: item.salePrice,
-        imageUrl: item.imageUrl,
+        imageUrl: item.imageUrl
       }));
     } else {
-      /*
-       * Existing PRODUCT sale behavior.
-       * Keep using the products supplied by the current UI.
-       */
       products = JSON.parse(formData.get("products") || "[]");
     }
-
+    
     await updateSale(params.id, {
       name: saleName,
       startAt: startAt || null,
       endAt: endAt || null,
-
       saleType,
-
-      collectionId:
-        saleType === "COLLECTION" ? collectionId : null,
-
-      collectionTitle:
-        saleType === "COLLECTION" ? collectionTitle : null,
-
-      items: products,
+      collectionId: saleType === "COLLECTION" && collections.length > 0 ? collections[0].collectionId : null,
+      collectionTitle: saleType === "COLLECTION" && collections.length > 0 ? collections[0].collectionTitle : null,
+      collections: saleType === "COLLECTION" ? collections : null,
+      items: products
     });
-
+    
     return redirect("/app/sales");
   }
 
@@ -235,8 +210,7 @@ export default function EditSalePage() {
       initialStartAt={formattedStart}
       initialEndAt={formattedEnd}
       initialSaleType={sale.saleType || "PRODUCT"}
-      initialCollectionId={sale.collectionId || null}
-      initialCollectionTitle={sale.collectionTitle || ""}
+      initialCollections={sale.collections ? (typeof sale.collections === 'string' ? JSON.parse(sale.collections) : sale.collections) : (sale.collectionId ? [{collectionId: sale.collectionId, collectionTitle: sale.collectionTitle, salePrice: ''}] : [])}
       isEditable={isEditable}
       searchResults={searchResults}
       searchError={searchError}

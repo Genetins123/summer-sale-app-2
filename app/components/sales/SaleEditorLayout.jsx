@@ -9,8 +9,7 @@ export function SaleEditorLayout({
   initialStartAt,
   initialEndAt,
   initialSaleType,
-  initialCollectionId,
-  initialCollectionTitle,
+  initialCollections,
   isEditable,
   searchResults, 
   searchError, 
@@ -29,9 +28,9 @@ export function SaleEditorLayout({
   const [startAt, setStartAt] = useState(initialStartAt || "");
   const [endAt, setEndAt] = useState(initialEndAt || "");
   const [saleType, setSaleType] = useState(initialSaleType || "PRODUCT");
-  const [collectionId, setCollectionId] = useState(initialCollectionId || null);
-  const [collectionTitle, setCollectionTitle] = useState(initialCollectionTitle || "");
-  const [collectionSalePrice, setCollectionSalePrice] = useState("");
+  const [selectedCollections, setSelectedCollections] = useState(initialCollections || []);
+  const [pendingCollection, setPendingCollection] = useState(null);
+  const [pendingPrice, setPendingPrice] = useState("");
   
   const [selectedProducts, setSelectedProducts] = useState(() => {
     const grouped = {};
@@ -104,9 +103,33 @@ export function SaleEditorLayout({
   };
 
   const handleSelectCollection = (collection) => {
-    setCollectionId(collection.id);
-    setCollectionTitle(collection.title);
+    if (selectedCollections.some(c => c.collectionId === collection.id)) {
+      shopify.toast.show(`Collection is already added`, { isError: true });
+      return;
+    }
+    setPendingCollection({ collectionId: collection.id, collectionTitle: collection.title });
+    setPendingPrice("");
     shopify.toast.show(`Selected collection: ${collection.title}`);
+  };
+
+  const handleAddPendingCollection = () => {
+    if (!pendingCollection) return;
+    if (!pendingPrice || isNaN(parseFloat(pendingPrice))) {
+      shopify.toast.show("A valid price is required", { isError: true });
+      return;
+    }
+    setSelectedCollections(prev => [...prev, {
+      ...pendingCollection,
+      salePrice: parseFloat(pendingPrice)
+    }]);
+    setPendingCollection(null);
+    setPendingPrice("");
+    shopify.toast.show(`Added ${pendingCollection.collectionTitle} to the sale`);
+  };
+
+  const handleRemoveCollection = (collectionId) => {
+    if (!isEditable) return;
+    setSelectedCollections(prev => prev.filter(c => c.collectionId !== collectionId));
   };
 
   const handleUpdateSalePrice = (id, newPrice) => {
@@ -131,12 +154,8 @@ export function SaleEditorLayout({
     }
 
     if (saleType === "COLLECTION") {
-      if (!collectionId) {
-        shopify.toast.show("A collection must be selected", { isError: true });
-        return;
-      }
-      if (!collectionSalePrice || isNaN(parseFloat(collectionSalePrice))) {
-        shopify.toast.show("A valid collection sale price must be provided", { isError: true });
+      if (selectedCollections.length === 0) {
+        shopify.toast.show("At least one collection must be added", { isError: true });
         return;
       }
     }
@@ -163,9 +182,7 @@ export function SaleEditorLayout({
     if (endAt) formData.append("endAt", new Date(endAt).toISOString());
     
     if (saleType === "COLLECTION") {
-      formData.append("collectionId", collectionId);
-      formData.append("collectionTitle", collectionTitle);
-      formData.append("collectionSalePrice", collectionSalePrice);
+      formData.append("collections", JSON.stringify(selectedCollections));
     } else {
       const flatProducts = [];
       for (const p of selectedProducts) {
@@ -380,34 +397,74 @@ export function SaleEditorLayout({
 
       {saleType === "COLLECTION" && (
         <>
-          <s-section heading="Selected Collection">
+          <s-section heading="Selected Collections">
             <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '600px' }}>
-                {collectionId ? (
-                  <div>
-                    <s-text><strong>Collection:</strong> {collectionTitle}</s-text>
-                  </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {selectedCollections.length > 0 ? (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f4f6f8' }}>
+                        <th style={{ padding: '12px 8px', borderBottom: '1px solid #ccc' }}>Collection Title</th>
+                        <th style={{ padding: '12px 8px', borderBottom: '1px solid #ccc' }}>Sale Price</th>
+                        <th style={{ padding: '12px 8px', borderBottom: '1px solid #ccc' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedCollections.map((col) => (
+                        <tr key={col.collectionId} style={{ borderBottom: '1px solid #ebebeb' }}>
+                          <td style={{ padding: '12px 8px' }}><s-text>{col.collectionTitle}</s-text></td>
+                          <td style={{ padding: '12px 8px' }}>
+                            {isEditable ? (
+                              <input 
+                                type="number" 
+                                value={col.salePrice}
+                                onChange={(e) => {
+                                  const newPrice = e.target.value;
+                                  setSelectedCollections(prev => prev.map(c => 
+                                    c.collectionId === col.collectionId ? { ...c, salePrice: newPrice } : c
+                                  ));
+                                }}
+                                style={{ padding: '4px 8px', width: '100px', borderRadius: '4px', border: '1px solid #ccc' }}
+                              />
+                            ) : (
+                              <s-text>${col.salePrice}</s-text>
+                            )}
+                          </td>
+                          <td style={{ padding: '12px 8px' }}>
+                            <s-button disabled={!isEditable} onClick={() => handleRemoveCollection(col.collectionId)}>Remove</s-button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 ) : (
-                  <s-text tone="subdued">No collection selected yet.</s-text>
+                  <s-text tone="subdued">No collections selected yet.</s-text>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <label style={{ fontWeight: '500' }}>Collection Sale Price</label>
-                  <input 
-                    type="number" 
-                    value={collectionSalePrice}
-                    onChange={(e) => setCollectionSalePrice(e.target.value)}
-                    placeholder="e.g. 80.00"
-                    disabled={!isEditable || initialSaleName !== ""}
-                    style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
-                  />
-                  <s-text tone="subdued">This exact price will be applied to all variants of all products in the selected collection.</s-text>
-                </div>
+                {pendingCollection && (
+                  <div style={{ marginTop: '16px', padding: '16px', border: '1px solid #c9cccf', borderRadius: '8px', background: '#fff' }}>
+                    <s-text><strong>Pending Collection:</strong> {pendingCollection.collectionTitle}</s-text>
+                    <div style={{ display: 'flex', alignItems: 'end', gap: '16px', marginTop: '12px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                        <label style={{ fontWeight: '500' }}>Sale Price for this Collection</label>
+                        <input 
+                          type="number" 
+                          value={pendingPrice}
+                          onChange={(e) => setPendingPrice(e.target.value)}
+                          placeholder="e.g. 80.00"
+                          style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                        />
+                      </div>
+                      <s-button onClick={handleAddPendingCollection}>Add Collection</s-button>
+                      <s-button onClick={() => setPendingCollection(null)}>Cancel</s-button>
+                    </div>
+                  </div>
+                )}
               </div>
             </s-box>
           </s-section>
 
-          {isEditable && initialSaleName === "" && (
+          {isEditable && (
             <s-section heading="Search Collections">
               <s-stack direction="inline" gap="base">
                 <input 

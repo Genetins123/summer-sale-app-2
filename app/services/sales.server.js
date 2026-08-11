@@ -18,6 +18,7 @@ export async function createSale(data) {
       saleType: data.saleType || "PRODUCT",
       collectionId: data.collectionId || null,
       collectionTitle: data.collectionTitle || null,
+      collections: data.collections || null,
       items: {
         create: data.items.map(item => ({
           productId: item.productId,

@@ -36,13 +36,21 @@ export const action = async ({ request }) => {
     const startAt = formData.get("startAt");
     const endAt = formData.get("endAt");
     const saleType = formData.get("saleType") || "PRODUCT";
-    const collectionId = formData.get("collectionId");
-    const collectionTitle = formData.get("collectionTitle");
-    const collectionSalePrice = formData.get("collectionSalePrice");
     
     let products = [];
+    let collections = [];
+    
     if (saleType === "COLLECTION") {
-      products = await getCollectionProductsWithVariants(admin, collectionId, collectionSalePrice);
+      collections = JSON.parse(formData.get("collections") || "[]");
+      const allProductsMap = new Map();
+      
+      for (const col of collections) {
+        const colProducts = await getCollectionProductsWithVariants(admin, col.collectionId, col.salePrice);
+        for (const p of colProducts) {
+          allProductsMap.set(p.variantId, p);
+        }
+      }
+      products = Array.from(allProductsMap.values());
     } else {
       products = JSON.parse(formData.get("products") || "[]");
     }
@@ -53,8 +61,9 @@ export const action = async ({ request }) => {
       startAt: startAt || null,
       endAt: endAt || null,
       saleType,
-      collectionId: saleType === "COLLECTION" ? collectionId : null,
-      collectionTitle: saleType === "COLLECTION" ? collectionTitle : null,
+      collectionId: saleType === "COLLECTION" && collections.length > 0 ? collections[0].collectionId : null,
+      collectionTitle: saleType === "COLLECTION" && collections.length > 0 ? collections[0].collectionTitle : null,
+      collections: saleType === "COLLECTION" ? collections : null,
       items: products
     });
     

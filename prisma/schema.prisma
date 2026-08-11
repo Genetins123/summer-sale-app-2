@@ -41,6 +41,7 @@ model Sale {
   saleType        String     @default("PRODUCT")
   collectionId    String?
   collectionTitle String?
+  collections     Json?
 
   items           SaleItem[]
 }
