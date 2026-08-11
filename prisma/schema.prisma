@@ -34,16 +34,19 @@ model Session {
 }
 
 model Sale {
-  id          String   @id @default(cuid())
-  shop        String   @default("")
-  name        String
-  status      String   @default("Draft")
-  startAt     DateTime?
-  endAt       DateTime?
-  scheduledAt DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  items       SaleItem[]
+  id              String   @id @default(cuid())
+  shop            String   @default("")
+  name            String
+  status          String   @default("Draft")
+  startAt         DateTime?
+  endAt           DateTime?
+  scheduledAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  saleType        String   @default("PRODUCT")
+  collectionId    String?
+  collectionTitle String?
+  items           SaleItem[]
 }
 
 model SaleItem {

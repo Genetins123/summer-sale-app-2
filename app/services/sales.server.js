@@ -15,6 +15,9 @@ export async function createSale(data) {
       startAt: data.startAt ? new Date(data.startAt) : null,
       endAt: data.endAt ? new Date(data.endAt) : null,
       scheduledAt: status === "Scheduled" ? new Date() : null,
+      saleType: data.saleType || "PRODUCT",
+      collectionId: data.collectionId || null,
+      collectionTitle: data.collectionTitle || null,
       items: {
         create: data.items.map(item => ({
           productId: item.productId,
@@ -46,6 +49,9 @@ export async function updateSale(id, data) {
       startAt: data.startAt ? new Date(data.startAt) : null,
       endAt: data.endAt ? new Date(data.endAt) : null,
       scheduledAt: status === "Scheduled" ? new Date() : null,
+      saleType: data.saleType || "PRODUCT",
+      collectionId: data.collectionId || null,
+      collectionTitle: data.collectionTitle || null,
       items: {
         create: data.items.map(item => ({
           productId: item.productId,
