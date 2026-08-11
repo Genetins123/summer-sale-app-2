@@ -1,58 +1,53 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// Note that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
-  refreshToken        String?
-  refreshTokenExpires DateTime?
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline             Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName            String?
+  lastName             String?
+  email                String?
+  accountOwner         Boolean   @default(false)
+  locale               String?
+  collaborator         Boolean?  @default(false)
+  emailVerified        Boolean?  @default(false)
+  refreshToken         String?
+  refreshTokenExpires  DateTime?
 }
 
 model Sale {
-  id              String   @id @default(cuid())
-  shop            String   @default("")
+  id              String     @id @default(cuid())
+  shop            String     @default("")
   name            String
-  status          String   @default("Draft")
+  status          String     @default("Draft")
   startAt         DateTime?
   endAt           DateTime?
   scheduledAt     DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  saleType        String   @default("PRODUCT")
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  saleType        String     @default("PRODUCT")
   collectionId    String?
   collectionTitle String?
+
   items           SaleItem[]
 }
 
 model SaleItem {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   saleId        String
-  sale          Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
   productId     String
   variantId     String?
   productTitle  String
@@ -62,4 +57,5 @@ model SaleItem {
   imageUrl      String?
   appliedAt     DateTime?
   restoredAt    DateTime?
+  sale          Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
 }
