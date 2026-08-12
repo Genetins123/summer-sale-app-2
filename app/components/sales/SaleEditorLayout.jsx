@@ -512,7 +512,6 @@ export function SaleEditorLayout({
                             <td style={{ padding: '12px 8px' }}><s-text>{collection.title}</s-text></td>
                             <td style={{ padding: '12px 8px' }}>
                               <s-text>{collection.productsCount?.count || 0}</s-text>
-                              <div style={{ fontSize: '10px', color: 'red' }}>{JSON.stringify(collection)}</div>
                             </td>
                             <td style={{ padding: '12px 8px' }}>
                               <s-button onClick={() => handleSelectCollection(collection)} disabled={isSearching}>Select</s-button>
