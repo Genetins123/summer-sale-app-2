@@ -465,7 +465,7 @@ export function SaleEditorLayout({
           </s-section>
 
           {isEditable && (
-            <s-section heading="Search Collections">
+            <s-section heading="Search Collections (DEBUG)">
               <s-stack direction="inline" gap="base">
                 <input 
                   type="text" 
