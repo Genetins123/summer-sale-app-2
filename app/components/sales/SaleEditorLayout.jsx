@@ -58,6 +58,15 @@ export function SaleEditorLayout({
 
   useEffect(() => { setQueryValue(searchQuery || ""); }, [searchQuery]);
 
+  useEffect(() => {
+    // When saleType changes, auto-trigger a search so the table populates
+    if (saleType === "COLLECTION" && searchType !== "collection") {
+      onSearch(queryValue, "collection");
+    } else if (saleType === "PRODUCT" && searchType !== "product") {
+      onSearch(queryValue, "product");
+    }
+  }, [saleType]);
+
   const handleSearchClick = () => onSearch(queryValue, saleType === "COLLECTION" ? "collection" : "product");
   const handleKeyDown = (e) => { if (e.key === "Enter") handleSearchClick(); };
 
@@ -199,8 +208,9 @@ export function SaleEditorLayout({
     submit(formData, { method: "POST" });
   };
 
-  const nodes = searchResults?.nodes || [];
-  const pageInfo = searchResults?.pageInfo || {};
+  const expectedSearchType = saleType === "COLLECTION" ? "collection" : "product";
+  const nodes = searchType === expectedSearchType ? (searchResults?.nodes || []) : [];
+  const pageInfo = searchType === expectedSearchType ? (searchResults?.pageInfo || {}) : {};
 
   const saveButtonLabel = (startAt && endAt) ? "Save & Schedule" : "Save Draft";
 
@@ -465,7 +475,7 @@ export function SaleEditorLayout({
           </s-section>
 
           {isEditable && (
-            <s-section heading="Search Collections (DEBUG)">
+            <s-section heading="Search Collections">
               <s-stack direction="inline" gap="base">
                 <input 
                   type="text" 
@@ -500,7 +510,10 @@ export function SaleEditorLayout({
                         return (
                           <tr key={collection.id} style={{ borderBottom: '1px solid #ebebeb' }}>
                             <td style={{ padding: '12px 8px' }}><s-text>{collection.title}</s-text></td>
-                            <td style={{ padding: '12px 8px' }}><s-text>{collection.productsCount?.count || 0}</s-text></td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <s-text>{collection.productsCount?.count || 0}</s-text>
+                              <div style={{ fontSize: '10px', color: 'red' }}>{JSON.stringify(collection)}</div>
+                            </td>
                             <td style={{ padding: '12px 8px' }}>
                               <s-button onClick={() => handleSelectCollection(collection)} disabled={isSearching}>Select</s-button>
                             </td>
