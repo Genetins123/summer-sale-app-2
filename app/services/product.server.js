@@ -66,44 +66,102 @@ export async function searchProducts(admin, { query, cursor, direction = 'next',
 
 export async function searchCollections(admin, { query, cursor, direction = 'next', limit = 10 }) {
   const isNext = direction === 'next';
-  const first = isNext ? limit : null;
-  const last = isNext ? null : limit;
-  const after = isNext && cursor ? cursor : null;
-  const before = !isNext && cursor ? cursor : null;
-
   const searchQuery = query ? `title:*${query}*` : "";
 
-  const graphqlQuery = `#graphql
-    query SearchCollections($query: String, $first: Int, $last: Int, $after: String, $before: String) {
-      collections(first: $first, last: $last, after: $after, before: $before, query: $query) {
-        pageInfo {
-          hasNextPage
-          hasPreviousPage
-          startCursor
-          endCursor
-        }
-        nodes {
-          id
-          title
-          productsCount {
-            count
+  let currentCursor = cursor;
+  const validEdges = [];
+  
+  let hasNextPageShopify = isNext ? true : false;
+  let hasPrevPageShopify = isNext ? false : true;
+
+  if (!cursor) {
+    hasNextPageShopify = true;
+    hasPrevPageShopify = false;
+  }
+
+  while (validEdges.length < limit) {
+    const first = isNext ? 50 : null;
+    const last = isNext ? null : 50;
+    const after = isNext && currentCursor ? currentCursor : null;
+    const before = !isNext && currentCursor ? currentCursor : null;
+
+    const graphqlQuery = `#graphql
+      query SearchCollections($query: String, $first: Int, $last: Int, $after: String, $before: String) {
+        collections(first: $first, last: $last, after: $after, before: $before, query: $query) {
+          pageInfo {
+            hasNextPage
+            hasPreviousPage
+          }
+          edges {
+            cursor
+            node {
+              id
+              title
+              productsCount {
+                count
+              }
+            }
           }
         }
       }
-    }
-  `;
+    `;
 
-  try {
-    const response = await admin.graphql(graphqlQuery, {
-      variables: { query: searchQuery, first, last, after, before }
-    });
-    const json = await response.json();
-    if (json.errors) throw new Error(json.errors[0]?.message || "GraphQL Error");
-    return json.data.collections;
-  } catch (error) {
-    console.error("Failed to fetch collections:", error);
-    throw new Error(error.message || "Network failure");
+    try {
+      const response = await admin.graphql(graphqlQuery, {
+        variables: { query: searchQuery, first, last, after, before }
+      });
+      const json = await response.json();
+      if (json.errors) throw new Error(json.errors[0]?.message || "GraphQL Error");
+
+      const pageInfo = json.data.collections.pageInfo;
+      const edges = json.data.collections.edges;
+
+      if (edges.length === 0) {
+        break;
+      }
+
+      const filteredEdges = edges.filter(e => e.node.productsCount?.count > 0);
+      
+      if (isNext) {
+        validEdges.push(...filteredEdges);
+        currentCursor = edges[edges.length - 1].cursor;
+        hasNextPageShopify = pageInfo.hasNextPage;
+        if (!hasNextPageShopify) break;
+      } else {
+        validEdges.unshift(...filteredEdges);
+        currentCursor = edges[0].cursor;
+        hasPrevPageShopify = pageInfo.hasPreviousPage;
+        if (!hasPrevPageShopify) break;
+      }
+    } catch (error) {
+      console.error("Failed to fetch collections:", error);
+      throw new Error(error.message || "Network failure");
+    }
   }
+
+  let returnedEdges;
+  let finalHasNextPage = false;
+  let finalHasPreviousPage = false;
+
+  if (isNext) {
+    returnedEdges = validEdges.slice(0, limit);
+    finalHasNextPage = validEdges.length > limit || hasNextPageShopify;
+    finalHasPreviousPage = !!cursor;
+  } else {
+    returnedEdges = validEdges.slice(-limit);
+    finalHasPreviousPage = validEdges.length > limit || hasPrevPageShopify;
+    finalHasNextPage = true;
+  }
+
+  return {
+    nodes: returnedEdges.map(e => e.node),
+    pageInfo: {
+      hasNextPage: finalHasNextPage,
+      hasPreviousPage: finalHasPreviousPage,
+      startCursor: returnedEdges.length > 0 ? returnedEdges[0].cursor : null,
+      endCursor: returnedEdges.length > 0 ? returnedEdges[returnedEdges.length - 1].cursor : null,
+    }
+  };
 }
 
 export async function getCollectionProductsWithVariants(admin, collectionId, collectionSalePrice) {
