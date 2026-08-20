@@ -218,11 +218,11 @@ export default function EditSalePage() {
   }
 
   const formattedStart = sale.startAt
-    ? new Date(sale.startAt).toISOString().slice(0, 16)
+    ? new Date(sale.startAt).toISOString()
     : "";
 
   const formattedEnd = sale.endAt
-    ? new Date(sale.endAt).toISOString().slice(0, 16)
+    ? new Date(sale.endAt).toISOString()
     : "";
 
   return (

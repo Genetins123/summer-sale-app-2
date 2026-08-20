@@ -3,6 +3,16 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { useSubmit, useNavigation } from "react-router";
 import { SaleBuilder } from "./SaleBuilder";
 
+function toLocalDatetimeString(isoString) {
+  if (!isoString) return "";
+  // Check if it's already in YYYY-MM-DDThh:mm format (legacy)
+  if (isoString.length === 16 && !isoString.includes('Z')) return isoString;
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n) => n.toString().padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function SaleEditorLayout({ 
   initialSaleName, 
   initialProducts, 
@@ -27,8 +37,8 @@ export function SaleEditorLayout({
   const isSaving = navigation.state === "submitting" && (navigation.formData?.get("intent") === "save" || navigation.formData?.get("intent") === "update_end_time");
 
   const [saleName, setSaleName] = useState(initialSaleName || "");
-  const [startAt, setStartAt] = useState(initialStartAt || "");
-  const [endAt, setEndAt] = useState(initialEndAt || "");
+  const [startAt, setStartAt] = useState(toLocalDatetimeString(initialStartAt));
+  const [endAt, setEndAt] = useState(toLocalDatetimeString(initialEndAt));
   const [saleType, setSaleType] = useState(initialSaleType || "PRODUCT");
   const [selectedCollections, setSelectedCollections] = useState(initialCollections || []);
   const [pendingCollection, setPendingCollection] = useState(null);
