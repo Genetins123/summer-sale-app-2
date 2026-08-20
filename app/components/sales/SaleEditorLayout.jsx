@@ -11,6 +11,8 @@ export function SaleEditorLayout({
   initialSaleType,
   initialCollections,
   isEditable,
+  isEndDateTimeEditableOnly,
+  lockMessage,
   searchResults, 
   searchError, 
   isSearching, 
@@ -22,7 +24,7 @@ export function SaleEditorLayout({
   const shopify = useAppBridge();
   const submit = useSubmit();
   const navigation = useNavigation();
-  const isSaving = navigation.state === "submitting" && navigation.formData?.get("intent") === "save";
+  const isSaving = navigation.state === "submitting" && (navigation.formData?.get("intent") === "save" || navigation.formData?.get("intent") === "update_end_time");
 
   const [saleName, setSaleName] = useState(initialSaleName || "");
   const [startAt, setStartAt] = useState(initialStartAt || "");
@@ -152,6 +154,33 @@ export function SaleEditorLayout({
   };
 
   const handleSaveSale = () => {
+    if (isEndDateTimeEditableOnly) {
+      if (!endAt) {
+        shopify.toast.show("End date is required", { isError: true });
+        return;
+      }
+      
+      const newEnd = new Date(endAt);
+      const now = new Date();
+      
+      let message = "";
+      if (newEnd <= now) {
+        message = "This end time has already passed. The sale will end immediately and the original prices will be restored. Continue?";
+      } else {
+        message = `Update sale end time to ${newEnd.toLocaleString()}?`;
+      }
+      
+      if (!window.confirm(message)) {
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append("intent", "update_end_time");
+      formData.append("endAt", newEnd.toISOString());
+      submit(formData, { method: "POST" });
+      return;
+    }
+
     if (!saleName.trim()) {
       shopify.toast.show("Sale name is required", { isError: true });
       return;
@@ -216,15 +245,21 @@ export function SaleEditorLayout({
 
   return (
     <s-page heading={initialSaleName ? "Edit Sale" : "Create New Sale"}>
-      {isEditable && (
+      {(isEditable || isEndDateTimeEditableOnly) && (
         <s-button slot="primary-action" onClick={handleSaveSale} disabled={isSaving}>
-          {isSaving ? "Saving..." : saveButtonLabel}
+          {isSaving ? "Saving..." : (isEndDateTimeEditableOnly ? "Save End Time" : saveButtonLabel)}
         </s-button>
       )}
 
-      {!isEditable && (
+      {(!isEditable && !isEndDateTimeEditableOnly) && (
         <s-box padding="base" background="bg-surface-warning" borderRadius="base" marginBottom="base">
-          <s-text color="warning">This sale is currently running or completed. Editing is disabled.</s-text>
+          <s-text color="warning">{lockMessage || "This sale is currently running or completed. Editing is disabled."}</s-text>
+        </s-box>
+      )}
+
+      {isEndDateTimeEditableOnly && (
+        <s-box padding="base" background="bg-surface-warning" borderRadius="base" marginBottom="base">
+          <s-text color="warning">{lockMessage || "Only the end date and time can be changed."}</s-text>
         </s-box>
       )}
 
@@ -289,7 +324,7 @@ export function SaleEditorLayout({
                   type="datetime-local" 
                   value={endAt}
                   onChange={(e) => setEndAt(e.target.value)}
-                  disabled={!isEditable}
+                  disabled={!isEditable && !isEndDateTimeEditableOnly}
                   style={{ padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
                 />
               </div>

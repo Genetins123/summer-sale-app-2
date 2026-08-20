@@ -7,7 +7,9 @@ import {
   useNavigation,
   useSubmit,
   redirect,
+  useActionData,
 } from "react-router";
+import { useEffect } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 export const loader = async ({ request, params }) => {
@@ -71,6 +73,13 @@ export const action = async ({ request, params }) => {
   await authenticate.admin(request);
 
   const formData = await request.formData();
+  
+  if (formData.get("intent") === "update_end_time") {
+    const endAt = formData.get("endAt");
+    const { updateSaleEndTime } = await import("../services/sales.server");
+    const result = await updateSaleEndTime(params.id, endAt, session.shop);
+    return { success: true, message: result?.endedImmediately ? "Sale ended and original prices were restored successfully." : "Sale end time updated successfully." };
+  }
 
   if (formData.get("intent") === "save") {
     const saleName = formData.get("saleName");
@@ -124,9 +133,16 @@ export default function EditSalePage() {
     searchType,
   } = useLoaderData();
 
+  const actionData = useActionData();
   const navigation = useNavigation();
   const submit = useSubmit();
   const shopify = useAppBridge();
+
+  useEffect(() => {
+    if (actionData?.success && actionData?.message) {
+      shopify.toast.show(actionData.message);
+    }
+  }, [actionData, shopify]);
 
   const isSearching =
     navigation.state === "loading" &&
@@ -183,24 +199,30 @@ export default function EditSalePage() {
   }));
 
   /*
-   * Only Draft and Scheduled sales should be editable.
-   *
-   * Running/Completed sales remain protected.
+   * Draft sales are fully editable.
    */
-  const isEditable =
-    sale.status === "Draft" ||
-    sale.status === "Scheduled";
+  const isEditable = sale.status === "Draft";
+
+  /*
+   * Scheduled and Running sales allow editing endAt only.
+   */
+  const isEndDateTimeEditableOnly = sale.status === "Scheduled" || sale.status === "Running";
+
+  let lockMessage = "";
+  if (sale.status === "Running") {
+    lockMessage = "This sale is currently running. Only the end date and time can be changed.";
+  } else if (sale.status === "Scheduled") {
+    lockMessage = "This sale is scheduled. Only the end date and time can be changed.";
+  } else if (sale.status === "Completed") {
+    lockMessage = "This sale has completed and can no longer be edited.";
+  }
 
   const formattedStart = sale.startAt
-    ? new Date(sale.startAt)
-        .toISOString()
-        .slice(0, 16)
+    ? new Date(sale.startAt).toISOString().slice(0, 16)
     : "";
 
   const formattedEnd = sale.endAt
-    ? new Date(sale.endAt)
-        .toISOString()
-        .slice(0, 16)
+    ? new Date(sale.endAt).toISOString().slice(0, 16)
     : "";
 
   return (
@@ -212,6 +234,8 @@ export default function EditSalePage() {
       initialSaleType={sale.saleType || "PRODUCT"}
       initialCollections={sale.collections ? (typeof sale.collections === 'string' ? JSON.parse(sale.collections) : sale.collections) : (sale.collectionId ? [{collectionId: sale.collectionId, collectionTitle: sale.collectionTitle, salePrice: ''}] : [])}
       isEditable={isEditable}
+      isEndDateTimeEditableOnly={isEndDateTimeEditableOnly}
+      lockMessage={lockMessage}
       searchResults={searchResults}
       searchError={searchError}
       isSearching={isSearching}
