@@ -15,21 +15,34 @@ cron.schedule("* * * * *", async () => {
 
 async function processScheduledSales() {
   const now = new Date();
+  
+  // Pick up scheduled sales, OR sales that are "Running" but have items that failed to apply
   const scheduledSales = await prisma.sale.findMany({
     where: {
-      status: "Scheduled",
-      startAt: { lte: now }
+      OR: [
+        { status: "Scheduled", startAt: { lte: now } },
+        { 
+          status: "Running", 
+          startAt: { lte: now },
+          items: { some: { appliedAt: null } }
+        }
+      ]
     },
-    include: { items: true }
+    include: { items: { where: { appliedAt: null } } }
   });
 
   for (const sale of scheduledSales) {
-    console.log(`Starting scheduled sale: ${sale.name} (${sale.id})`);
+    if (sale.items.length === 0) continue; // Nothing to do if no unapplied items
+
+    console.log(`Starting/Resuming sale: ${sale.name} (${sale.id}) - ${sale.items.length} items to process`);
     
-    await prisma.sale.update({
-      where: { id: sale.id },
-      data: { status: "Starting" }
-    });
+    // Only set to starting if it was Scheduled. If it was Running, keep it Running to avoid UI flickering.
+    if (sale.status === "Scheduled") {
+      await prisma.sale.update({
+        where: { id: sale.id },
+        data: { status: "Starting" }
+      });
+    }
     
     try {
       const client = await getOfflineGraphqlClient(sale.shop);
@@ -63,28 +76,22 @@ async function processScheduledSales() {
         } catch (itemError) {
           console.error(`Failed to apply sale price for product ${productId}:`, itemError.message || itemError);
         }
+        
+        // Sleep to avoid rate limits (Shopify REST/GraphQL restores at ~50 points/sec, each mutation is 10)
+        // Sleeping for 250ms ensures max 40 points/sec, preventing Throttled errors.
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
 
-      if (successCount > 0 || sale.items.length === 0) {
-        await prisma.sale.update({
-          where: { id: sale.id },
-          data: { status: "Running" }
-        });
-        console.log(`Sale ${sale.name} is now RUNNING. Applied prices to ${successCount} items.`);
-      } else {
-        await prisma.sale.update({
-          where: { id: sale.id },
-          data: { status: "Failed" }
-        });
-        console.log(`Sale ${sale.name} FAILED to start. Applied prices to 0 items.`);
-      }
-
-    } catch (saleError) {
-      console.error(`Failed to start sale ${sale.name}:`, saleError.message || saleError);
+      // If we finished processing, ensure it is set to Running.
       await prisma.sale.update({
         where: { id: sale.id },
-        data: { status: "Failed" }
+        data: { status: "Running" }
       });
+      console.log(`Sale ${sale.name} is RUNNING. Processed ${successCount} items in this batch.`);
+
+    } catch (saleError) {
+      console.error(`Failed to process sale ${sale.name}:`, saleError.message || saleError);
+      // We don't mark as Failed here because we might want to retry on next cron tick
     }
   }
 }
@@ -96,7 +103,8 @@ async function processRunningSales() {
       status: "Running",
       endAt: { lte: now }
     },
-    include: { items: true }
+    // Only include items that were actually applied and haven't been restored yet
+    include: { items: { where: { appliedAt: { not: null }, restoredAt: null } } }
   });
 
   for (const sale of runningSales) {
@@ -139,27 +147,37 @@ async function processRunningSales() {
         } catch (itemError) {
           console.error(`Failed to restore price for product ${productId}:`, itemError.message || itemError);
         }
+
+        // Sleep to avoid rate limits
+        await new Promise(resolve => setTimeout(resolve, 250));
       }
 
-      if (successCount > 0 || sale.items.length === 0) {
+      // Check if there are any items left unrestored (due to errors)
+      const remainingItems = await prisma.saleItem.count({
+        where: { saleId: sale.id, appliedAt: { not: null }, restoredAt: null }
+      });
+
+      if (remainingItems === 0) {
         await prisma.sale.update({
           where: { id: sale.id },
           data: { status: "Completed" }
         });
         console.log(`Sale ${sale.name} is now COMPLETED. Restored prices for ${successCount} items.`);
       } else {
+        // Keep it as 'Ending' or 'Running' so next tick can retry, but for UI, let's keep it 'Running'
+        // so we don't introduce a new unhandled state. We'll set it back to 'Running' so this function picks it up again.
         await prisma.sale.update({
           where: { id: sale.id },
-          data: { status: "Failed" }
+          data: { status: "Running" }
         });
-        console.log(`Sale ${sale.name} FAILED to end properly. Restored prices for 0 items.`);
+        console.log(`Sale ${sale.name} failed to restore ${remainingItems} items. Will retry.`);
       }
 
     } catch (saleError) {
       console.error(`Failed to end sale ${sale.name}:`, saleError.message || saleError);
       await prisma.sale.update({
         where: { id: sale.id },
-        data: { status: "Failed" }
+        data: { status: "Running" } // Revert to running so it retries
       });
     }
   }

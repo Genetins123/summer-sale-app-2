@@ -169,9 +169,15 @@ export async function updateSaleEndTime(id, endAtStr, shop) {
       } catch (itemError) {
         console.error(`Failed to restore price for product ${productId} on immediate end:`, itemError);
       }
+      
+      await new Promise(resolve => setTimeout(resolve, 250));
     }
 
-    if (successCount > 0 || sale.items.length === 0) {
+    const remainingItems = await prisma.saleItem.count({
+      where: { saleId: sale.id, appliedAt: { not: null }, restoredAt: null }
+    });
+
+    if (remainingItems === 0) {
       await prisma.sale.update({
         where: { id: sale.id },
         data: { status: "Completed" }
@@ -179,7 +185,7 @@ export async function updateSaleEndTime(id, endAtStr, shop) {
     } else {
       await prisma.sale.update({
         where: { id: sale.id },
-        data: { status: "Failed" }
+        data: { status: "Running" } // Revert to running so scheduler can pick it up again and retry
       });
     }
     return { endedImmediately: true };
